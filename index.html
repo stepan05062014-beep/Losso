@@ -399,6 +399,7 @@ const RAR=[
  {n:'Божественный',nn:'БОЖЕСТВЕННОЕ', c:'#ff4d4d',w:0.05,  d:0.60},
  {n:'Космический', nn:'КОСМИЧЕСКОЕ',  c:'#818cf8',w:0.004, d:0.72},
  {n:'Секретный',   nn:'СЕКРЕТНОЕ',    c:'#1de9b6',w:0.0003,d:0.85},
+ {n:'Мини-босс',   nn:'ТЁМНОЕ',       c:'#b026ff',w:0.05,  d:0.99},
 ];
 const ANIMALS=[
  ['mouse','Мышь','🐁',0,0.8],['chicken','Петух','🐓',0,1],['duck','Утка','🦆',0,1.3],
@@ -415,7 +416,8 @@ const ANIMALS=[
  ['dragon','Дракон','🐉',6,2600],['trex','Тираннозавр','🦖',6,3200],['bronto','Бронтозавр','🦕',6,3600],
  ['starwhale','Звёздный кит','🐋',7,22000],['spacesquid','Космический кальмар','🦑',7,27000],
  ['ancient','Древний дракон','🐲',8,150000],
-].map(([id,n,e,r,inc])=>({id,n,e,r,inc,size:44+r*4}));
+ ['preacher','Проповедник тьмы','🧙‍♂️',9,50000],
+].map(([id,n,e,r,inc])=>({id,n,e,r,inc,size:r===9?86:44+r*4,boss:r===9}));
 const DEF={};ANIMALS.forEach(a=>DEF[a.id]=a);
 const RCOUNT=RAR.map((_,r)=>ANIMALS.filter(a=>a.r===r).length);
 
@@ -558,7 +560,7 @@ function fmt(n){
   return n.toFixed(n<10?2:n<100?1:0)+u[i];
 }
 function luckNow(){let l=L().luck;if(L().night&&ENV.night>.5)l*=L().night;if(evOn('luck'))l=Math.min(3,l*(1+(EVENTS.luck.mult-1)*.25));return l;}
-function weights(){const lk=luckNow();return ANIMALS.map(a=>RAR[a.r].w*Math.pow(lk,a.r)/RCOUNT[a.r]);}
+function weights(){const lk=luckNow();return ANIMALS.map(a=>a.boss?RAR[a.r].w*Math.pow(lk,3):RAR[a.r].w*Math.pow(lk,a.r)/RCOUNT[a.r]);}
 function pickDef(){
   const w=weights();let s=w.reduce((a,b)=>a+b,0),r=Math.random()*s;
   for(let i=0;i<w.length;i++){r-=w[i];if(r<=0)return ANIMALS[i];}
@@ -570,6 +572,7 @@ function oddsOf(def,mut){
 }
 const fmtOdds=n=>n.toLocaleString('ru-RU');
 function catchChance(a){
+  if(a.def.boss)return 0.01;
   return Math.max(0.05,Math.min(0.97,L().cat-RAR[a.def.r].d-(a.mut?0.03+MUTS.indexOf(MUT[a.mut])*0.03:0)));
 }
 
@@ -811,14 +814,17 @@ function computeEnv(){
 
 // ======================= ЖИВОТНЫЕ =======================
 function spawn(initial){
-  const def=pickDef(),dir=Math.random()<.5?1:-1;
+  let def=pickDef();const dir=Math.random()<.5?1:-1;
+  if(def.boss&&(initial||animals.some(x=>x.def.boss&&!x.test))){do{def=pickDef();}while(def.boss);}
   const sp=(34+def.r*11)*rand(.8,1.25);
   const mut=rollMut();
   const a={def,mut,odds:oddsOf(def,mut),hl:0,
     x:initial?rand(80,W-80):(dir>0?-50:W+50),y:rand(FIELD_TOP,FIELD_BOT),
     vx:dir*sp,vy:rand(-10,10),tt:rand(1,3),pause:0,flee:0,ph:Math.random()*10};
+  if(def.boss)bossInit(a);
   animals.push(a);
   if(!initial)announce(a);
+  if(def.boss)bossArrive(a);
 }
 function updateAnimals(dt){
   for(const a of animals){
@@ -826,15 +832,18 @@ function updateAnimals(dt){
     a.tt-=dt;
     if(a.tt<=0){a.vy=rand(-18,18);a.pause=(a.flee<=0&&Math.random()<.18)?rand(.6,1.8):0;a.tt=rand(1.2,3.2);}
     if(a.flee>0)a.flee-=dt;
+    if(a.def.boss)a.pause=0;
     if(a.pause>0&&a.flee<=0){a.pause-=dt;continue;}
     const d=depth(a.y),m=a.flee>0?2.4:1;
     a.x+=a.vx*dt*d*m;a.y+=a.vy*dt*m;
     if(a.y<FIELD_TOP){a.y=FIELD_TOP;a.vy=Math.abs(a.vy);}
     if(a.y>FIELD_BOT){a.y=FIELD_BOT;a.vy=-Math.abs(a.vy);}
+    if(a.def.boss)bossStep(a,dt);
     // пыль из-под копыт
     if(Math.random()<dt*(a.flee>0?14:3+a.def.r*.4))
       wParticles.push({x:a.x-Math.sign(a.vx)*a.def.size*d*.3+rand(-4,4),y:a.y+rand(-2,2),r:rand(2,4)*d,vr:rand(8,16)*d,life:rand(.5,.9),max:.9,vx:-Math.sign(a.vx)*rand(5,20),vy:rand(-8,-2)});
   }
+  for(const a of animals)if(a.def.boss&&!a.test&&(a.x<=-90||a.x>=W+90)){toast('😈 Проповедник тьмы ушёл во тьму… Он ещё вернётся.','#c77dff');addBossFeed(false);}
   for(const a of animals)if(a.test)a.ttl=(a.dieAt-performance.now())/1000;
   animals=animals.filter(a=>a.x>-90&&a.x<W+90&&!(a.test&&a.ttl<=0));
   spawnT-=dt;
@@ -899,7 +908,8 @@ function resolveThrow(){
     starBurst(lasso.sx,lasso.sy,RAR[best.def.r].c,14);
     cam.punch=.035;beep(880,.1,'triangle',.05);
   }else{
-    best.flee=2.2;best.pause=0;
+    best.flee=best.def.boss?1.1:2.2;best.pause=0;
+    if(best.def.boss){best.tries=(best.tries||0)+1;bossTaunt(best);}
     floatText(lasso.tx,lasso.ty-30,'Вырвался!','#ff7b6b');S.st.esc++;checkHidden();
     cam.shake=.5;beep(160,.18,'sawtooth',.04);
     goBack();
@@ -1036,6 +1046,7 @@ function drawAnimal(c,a,x,y,s,lifted){
   const moving=a.pause<=0||a.flee>0;
   const hop=lifted?0:(moving?Math.abs(Math.sin(time*(7+(a.flee>0?6:0))+a.ph)):0);
   const special=d.r>=3||a.mut;
+  if(d.boss&&!lifted&&!a.test)drawBossFx(c,a,x,y,sz);
   const glowCol=al=>rb?`hsla(${(time*200)%360},100%,60%,${al})`:rgba(col,al);
   if(!lifted){
     // тень
@@ -1068,7 +1079,7 @@ function drawAnimal(c,a,x,y,s,lifted){
   c.save();c.translate(x,cy+sz*.45);c.scale((a.vx>0?-1:1)/st,st);c.translate(0,-sz*.45);
   if(lifted)c.rotate(Math.sin(time*15)*.25);
   let f='';if(a.mut){const mf=MUT[a.mut].filter;f=mf==='rainbow'?`saturate(2.2) hue-rotate(${(time*240)%360}deg)`:mf;}
-  c.filter=(f?f+' ':'')+'drop-shadow(0 3px 2px rgba(0,0,0,.35))';
+  c.filter=(f?f+' ':'')+(d.boss?'brightness(.5) saturate(.5) contrast(1.3) drop-shadow(0 0 10px #b026ff) ':'')+'drop-shadow(0 3px 2px rgba(0,0,0,.35))';
   c.font=`${sz}px ${EMOJI_FONT}`;c.textAlign='center';c.textBaseline='middle';
   c.fillStyle='#000';c.globalAlpha=1;c.fillText(d.e,0,0);c.restore();
   c.filter='none';
@@ -1285,6 +1296,7 @@ function render(dt){
     ctx.fillStyle='rgba(40,25,5,.75)';ctx.beginPath();ctx.roundRect(x,ey-15,tw,30,15);ctx.fill();
     ctx.strokeStyle=`hsl(${45+Math.sin(time*4)*10},100%,60%)`;ctx.lineWidth=2;ctx.stroke();
     ctx.fillStyle='#ffe58a';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,W/2,ey+1);ey+=36;}}
+  drawBossHud(ctx);
   if(lasso.state==='idle'&&blocks.some(b=>!b.open)&&!modalOpen&&S.caught>0){
     ctx.font=`900 15px ${UIFONT}`;const t='🎁 Накинь лассо на лаки блок!';
     const tw=ctx.measureText(t).width+26,y=H-22;
@@ -1473,6 +1485,7 @@ function onCatch(a){
    checkHidden();}
   if(!S.best||a.odds>S.best.o)S.best={a:a.def.id,m:a.mut||null,o:a.odds};
   if(a.odds>=REVEAL_FROM)netSend('feed',{t:'catch',a:a.def.id,m:a.mut||null,o:a.odds});
+  if(a.def.boss){toast(`😈 ТЫ ПОЙМАЛ ПРОПОВЕДНИКА ТЬМЫ${a.tries?` с ${a.tries+1}-й попытки`:' с первой попытки!!!'}!`,'#e0aaff',true);thunder(1.6);gameFlash=.8;}
   pubProfile();
   modalOpen=true;renderModal();$('modal').classList.remove('hidden');
   fanfare(Math.min(a.def.r,8),!!a.mut);
@@ -1696,6 +1709,69 @@ function rollCounter(el,N,dur,onVal,done){
 
 
 
+
+
+// ======================= МИНИ-БОСС: ПРОПОВЕДНИК ТЬМЫ =======================
+const BOSS_SPEED=16; // крыса/мышь ходят ~27–42
+function bossInit(a){
+  const dir=Math.sign(a.vx)||1;
+  a.vx=dir*BOSS_SPEED;a.vy=rand(-6,6);a.bounces=3;a.tries=0;a.pause=0;
+  a.y=clamp(a.y,FIELD_TOP+50,FIELD_BOT-20);
+}
+function bossArrive(a){
+  if(a.test)return;
+  toast('😈 <b>МИНИ-БОСС!</b> Появился Проповедник тьмы — шанс поимки всего 1%!','#c77dff',true);
+  thunder(1.4);gameFlash=.5;cam.shake=.8;
+  for(let i=0;i<3;i++)gameBolts.push(genBolt(a.x+rand(-100,100),-10,a.x,a.y-a.def.size*.5,'#c77dff'));
+  [0,-3,-7,-12].forEach((n,i)=>beep(220*Math.pow(2,n/12),.35,'sawtooth',.05,i*.18));
+}
+function bossStep(a,dt){
+  if(a.test)return;
+  if(a.bounces>0&&((a.x<70&&a.vx<0)||(a.x>W-70&&a.vx>0))){
+    a.vx=-a.vx;a.bounces--;
+    const s=depth(a.y),cy=a.y-a.def.size*s*.45;
+    rings.push({x:a.x,y:a.y,r:10,vr:220,life:.6,max:.6,col:'#b026ff'});burst(a.x,cy,'#b026ff',26);
+    floatText(a.x,cy-a.def.size*s*.6,a.bounces>0?`↩ отскоков: ${a.bounces}`:'Я ухожу во тьму…','#e0aaff',a.bounces===0);
+    beep(150,.25,'sawtooth',.05);cam.shake=Math.max(cam.shake,.35);
+  }
+  if(Math.random()<dt*10){const s=depth(a.y);particles.push({t:'dot',x:a.x+rand(-25,25)*s,y:a.y-rand(5,70)*s,vx:rand(-10,10),vy:rand(-40,-15),life:rand(.8,1.4),col:Math.random()<.5?'rgba(60,0,90,.75)':'rgba(176,38,255,.6)',sz:rand(3,7)*s,g:-10});}
+}
+const BOSS_TAUNTS=['Ха-ха-ха!','Тьма не сдаётся!','Слабо, ковбой!','Мимо, смертный!','Ещё попытка?','Моя тьма сильнее!','Хи-хи…','Не сегодня!'];
+function bossTaunt(a){
+  const s=depth(a.y);floatText(a.x,a.y-a.def.size*s*1.45,BOSS_TAUNTS[Math.random()*BOSS_TAUNTS.length|0],'#e0aaff');
+  beep(110,.3,'sawtooth',.04);beep(98,.4,'sawtooth',.03,.15);
+}
+function drawBossFx(c,a,x,y,sz){
+  // тёмный круг-портал под ногами
+  c.save();c.translate(x,y);c.scale(1,.3);
+  const g=c.createRadialGradient(0,0,0,0,0,sz*1.1);g.addColorStop(0,'rgba(20,0,35,.85)');g.addColorStop(.6,'rgba(90,10,150,.45)');g.addColorStop(1,'rgba(176,38,255,0)');
+  c.fillStyle=g;c.beginPath();c.arc(0,0,sz*1.1,0,7);c.fill();
+  c.rotate(time*1.2);c.strokeStyle='rgba(224,170,255,.7)';c.lineWidth=4;c.setLineDash([14,10]);c.beginPath();c.arc(0,0,sz*.85,0,7);c.stroke();
+  c.rotate(-time*2.6);c.strokeStyle='rgba(176,38,255,.6)';c.setLineDash([4,12]);c.beginPath();c.arc(0,0,sz*.65,0,7);c.stroke();c.setLineDash([]);
+  c.restore();
+  // руны вокруг
+  c.font=`900 ${sz*.2}px ${UIFONT}`;c.textAlign='center';c.textBaseline='middle';c.fillStyle='rgba(224,170,255,.8)';
+  for(let i=0;i<5;i++){const an=time*.8+i/5*Math.PI*2;c.globalAlpha=.4+.4*Math.sin(time*3+i);c.fillText('ᛟᛉᛞᚦᛗ'[i],x+Math.cos(an)*sz*.75,y-sz*.5+Math.sin(an)*sz*.25);}
+  c.globalAlpha=1;
+}
+function drawBossHud(c){
+  const a=animals.find(x=>x.def.boss&&!x.test);
+  if(!a){bossDim=Math.max(0,bossDim-.02);}else bossDim=Math.min(1,bossDim+.02);
+  if(bossDim>0){const g=c.createRadialGradient(W/2,H/2,H*.3,W/2,H/2,H*.85);g.addColorStop(0,'rgba(40,0,60,0)');g.addColorStop(1,`rgba(40,0,60,${(.45+Math.sin(time*2)*.08)*bossDim})`);c.fillStyle=g;c.fillRect(0,0,W,H);}
+  if(!a)return;
+  const y=54,w=270,x=12;
+  c.fillStyle='rgba(20,5,30,.88)';c.beginPath();c.roundRect(x,y-4,w,46,12);c.fill();
+  c.strokeStyle=`hsl(${280+Math.sin(time*3)*10},100%,${60+Math.sin(time*5)*10}%)`;c.lineWidth=2;c.stroke();
+  c.font=`900 15px ${UIFONT}`;c.textAlign='left';c.textBaseline='middle';c.fillStyle='#e0aaff';
+  c.fillText('😈 Проповедник тьмы',x+12,y+9);
+  c.font=`800 12px ${UIFONT}`;c.fillStyle='#ff7bd5';c.fillText('Шанс 1%',x+12,y+29);
+  c.fillStyle='rgba(240,220,255,.85)';c.fillText(` · Попыток: ${a.tries||0}`,x+12+c.measureText('Шанс 1%').width,y+29);
+  c.textAlign='right';c.fillStyle='#ff7bd5';c.fillText('😈',x+w-12,y+9);
+  for(let i=0;i<3;i++){const on=i<a.bounces;c.fillStyle=on?'#b026ff':'rgba(255,255,255,.15)';c.beginPath();c.arc(x+w-12-(2-i)*20-6,y+29,6,0,7);c.fill();
+    if(on){c.strokeStyle='#e0aaff';c.lineWidth=1.5;c.stroke();}}
+}
+let bossDim=0;
+function addBossFeed(caught){}
 
 // ======================= НАСТРОЙКИ ПОКАЗА ПОЯВЛЕНИЙ =======================
 let SET={mode:'big',from:50};try{Object.assign(SET,JSON.parse(localStorage.getItem('lr_set'))||{});}catch(e){}
@@ -2131,8 +2207,10 @@ let evKey='';
 function evWatch(force){const k=(evOn('luck')?'L'+EVENTS.luck.mult:'')+(evOn('mut')?'M'+EVENTS.mut.mult:'');if(k!==evKey||force){evKey=k;renderLassoInfo();renderBook();}}
 function spawnSpecific(id,mut){
   const def=DEF[id];if(!def)return;const dir=Math.random()<.5?1:-1;
+  if(def.boss&&animals.some(x=>x.def.boss&&!x.test)){toast('😈 Проповедник тьмы уже на поле!','#c77dff');return;}
   const a={def,mut,odds:oddsOf(def,mut),hl:0,x:rand(220,W-220),y:rand(FIELD_TOP+60,FIELD_BOT-60),vx:dir*(34+def.r*11)*.8,vy:0,tt:rand(2,4),pause:2.5,flee:0,ph:Math.random()*10};
-  animals.push(a);announce(a,true);
+  if(def.boss){bossInit(a);a.pause=0;}
+  animals.push(a);if(def.boss)setTimeout(()=>bossArrive(a),50);announce(a,true);
 }
 function renderAdmin(){setTimeout(()=>{const s=$('admBlock');if(s){s.onchange=blockInfo;blockInfo();}},0);
   const animOpts=ANIMALS.map(a=>`<option value="${a.id}" ${a.id==='trex'?'selected':''}>${a.e} ${a.n} (${RAR[a.r].n})</option>`).join('');
