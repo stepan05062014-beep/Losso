@@ -308,6 +308,19 @@ select.inp{cursor:pointer}select.inp option{background:#2a1b0e}
 @keyframes sbIn{from{opacity:0;transform:translateY(-24px) scale(.85)}to{opacity:1;transform:none}}
 @keyframes sbShine{to{transform:translateX(100%)}}
 @keyframes sbPulse{to{box-shadow:0 0 30px 2px var(--c),0 6px 16px rgba(0,0,0,.45)}}
+.hlHead{display:flex;justify-content:space-between;align-items:center;font-weight:900;font-size:15px;margin:16px 2px 6px;color:#e9b6ff;text-shadow:0 0 12px rgba(200,120,255,.5)}
+.hlHead span{font-size:12px;background:rgba(180,108,240,.2);border:1px solid rgba(233,182,255,.4);padding:2px 9px;border-radius:9px}
+.hlItem{background:linear-gradient(135deg,rgba(70,25,95,.55),rgba(30,12,40,.6))!important;border:1px solid rgba(233,182,255,.25)}
+.hlItem.cur{border:2px solid #e9b6ff;box-shadow:0 0 20px -4px #c084fc}
+.hlItem::before{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 35%,rgba(233,182,255,.12) 50%,transparent 65%);background-size:250% 100%;animation:slide 3.5s linear infinite;pointer-events:none}
+.hlItem.locked{opacity:.92}
+.hlq{background:radial-gradient(circle,#2a0f3b,#0a0410)!important;border-color:#6b2a99!important;font-size:22px;display:flex;align-items:center;justify-content:center;width:44px;height:44px;filter:drop-shadow(0 0 6px #a855f7)}
+.hlHint{display:block;font-weight:700;font-size:11px;opacity:.85;margin-top:2px;line-height:1.3}
+.shopItem .info .hlHint b{color:#f0c8ff;display:inline;font-size:inherit;font-weight:900}
+.hlP{display:block;font-size:10px;opacity:.7;margin-top:2px}
+.prog.hp i{background:linear-gradient(90deg,#a855f7,#f0abfc)}
+.hlName{background:linear-gradient(90deg,#f0c8ff,#c084fc,#f0abfc);-webkit-background-clip:text;background-clip:text;color:transparent!important}
+.hlPerk{display:block;color:#f0c8ff;font-size:11px;margin-top:2px}
 </style>
 </head>
 <body>
@@ -424,7 +437,70 @@ const LASSOS=[
  {n:'Божественное лассо', p:1000000000, rad:86,spd:1380,luck:2.20,cat:1.34,col:'divine'},
  {n:'Бесконечное лассо',  p:5000000000, rad:94,spd:1500,luck:2.30,cat:1.40,col:'infinite'},
 ];
+// ---------- СЕКРЕТНЫЕ ЛАССО ----------
+const HLS=[
+ {id:'moon',  n:'Лунное лассо',          ic:'🌙',rad:72, spd:1150,luck:1.95,cat:1.18,col:'moon',  perk:'Ночью удача ×1.4',night:1.4,
+   hint:'Когда солнце спит, звери беспечны. Поймай <b>30</b> зверей под луной.'},
+ {id:'clover',n:'Клевер-лассо',          ic:'🍀',rad:68, spd:1100,luck:2.0, cat:1.15,col:'clover',perk:'Мутации выпадают ×2',mutX:2,
+   hint:'Удача любит смелых. Поймай зверя, чей шанс реже <b>1 из 10 000</b>.'},
+ {id:'box',   n:'Лассо Коробочника',     ic:'🎁',rad:76, spd:1200,luck:1.9, cat:1.2, col:'box',   perk:'Лаки блоки не уворачиваются и летают медленнее, удача в блоках ×1.5',noDodge:1,boxLuck:1.5,
+   hint:'Крылатые коробки прячут тайну. Открой <b>25</b> лаки блоков.'},
+ {id:'shadow',n:'Проклятое лассо',       ic:'🥀',rad:64, spd:1000,luck:1.45,cat:2.2, col:'shadow',perk:'Звери почти никогда не вырываются (хват 97%)',
+   hint:'Каждая неудача делает тебя сильнее. Промахнись или упусти зверя <b>150</b> раз.'},
+ {id:'speed', n:'Лассо-Молния',          ic:'⚡',rad:70, spd:2600,luck:2.0, cat:1.2, col:'speed', perk:'Бросок в 2 раза быстрее',
+   hint:'Быстрые руки — быстрые деньги. Поймай <b>5</b> зверей за <b>25 секунд</b>.'},
+ {id:'prism', n:'Призматическое лассо',  ic:'💠',rad:80, spd:1300,luck:2.15,cat:1.25,col:'prism', perk:'Мутации выпадают ×3',mutX:3,
+   hint:'Золото, алмаз и радуга. Поймай зверей <b>всех трёх мутаций</b>.'},
+ {id:'book',  n:'Лассо Коллекционера',   ic:'📖',rad:100,spd:1500,luck:2.45,cat:1.4, col:'book',  perk:'Огромная петля и высокая удача',
+   hint:'Знание — сила. Открой <b>всех зверей</b> в бестиарии.'},
+ {id:'dragon',n:'Драконье лассо',        ic:'🐲',rad:108,spd:1600,luck:2.6, cat:1.5, col:'dragon',perk:'Лучшая удача среди обычных и секретных лассо',
+   hint:'Легенды говорят о древнем звере… <b>Поймай его.</b>'},
+ {id:'void',  n:'Лассо Пустоты',         ic:'🕳️',rad:115,spd:1800,luck:2.8, cat:1.55,col:'void',  perk:'Всё сразу: ночь ×1.4, мутации ×2, блоки не уворачиваются',night:1.4,mutX:2,noDodge:1,boxLuck:1.5,
+   hint:'Собери все тайны ранчо. Открой <b>все остальные</b> секретные лассо.'},
+];
+const HL={};HLS.forEach(h=>{HL[h.id]=h;h.p=0;h.secret=true;});
+function hlProg(id){
+  const st=S.st;
+  switch(id){
+    case'moon':return[st.night,30];
+    case'clover':return[Math.min(st.maxOdds,1e4),1e4];
+    case'box':return[st.blocks,25];
+    case'shadow':return[st.miss+st.esc,150];
+    case'speed':return[st.run,5];
+    case'prism':return[Object.keys(st.muts).length,3];
+    case'book':return[ANIMALS.filter(a=>S.found[a.id]).length,ANIMALS.length];
+    case'dragon':return[S.found.ancient?1:0,1];
+    case'void':return[HLS.filter(h=>h.id!=='void'&&S.hl[h.id]).length,HLS.length-1];
+  }return[0,1];
+}
+function checkHidden(){
+  for(const h of HLS){if(S.hl[h.id])continue;const [c,m]=hlProg(h.id);if(c>=m)unlockHidden(h.id);}
+}
+function unlockHidden(id,quiet){
+  const h=HL[id];if(!h||S.hl[id])return;S.hl[id]=Date.now();save();
+  if(!quiet){
+    setTimeout(()=>{
+      toast(`🔓 <b>СЕКРЕТНОЕ ЛАССО!</b><br>${h.ic} ${h.n}`,'#e9b6ff',true);
+      burst(HAND.x,HAND.y-50,'#e9b6ff',80);confetti(W/2,FIELD_TOP,120);rings.push({x:HAND.x,y:HAND.y-50,r:10,vr:380,life:.9,max:.9,col:'#e9b6ff'});
+      gameFlash=.6;cam.punch=.06;fanfare(8,true);
+      netSend('feed',{t:'hl',h:id});
+    },900);
+  }
+  renderShop();checkHidden();
+}
+function equipHidden(id){if(!S.hl[id])return;S.eq=id;save();renderAll();toast(`🪢 В руках: ${HL[id].ic} ${HL[id].n}`,'#e9b6ff');
+  burst(HAND.x,HAND.y-50,'#e9b6ff',50);beep(660,.1,'triangle',.05);beep(990,.2,'triangle',.05,.1);}
+function equipNormal(){S.eq=null;save();renderAll();toast('🪢 В руках: '+L().n);}
 const LASSO_UI={
+  moon:['#c7dcff','radial-gradient(circle at 35% 30%,#ffffff,#9db8e8 40%,#1b2a4a)'],
+  clover:['#4ade80','radial-gradient(circle at 35% 30%,#d9ffd9,#22c55e 45%,#0b3d1a)'],
+  box:['#ffcc2e','linear-gradient(135deg,#ffe27a,#ffb000 50%,#9a5a00)'],
+  shadow:['#a855f7','radial-gradient(circle at 35% 30%,#6b21a8,#1a0526 60%,#000)'],
+  speed:['#fff59f','linear-gradient(135deg,#0ea5e9,#fff59f 50%,#0ea5e9)'],
+  prism:['#a5f3fc','conic-gradient(#a5f3fc,#f0abfc,#fde68a,#a7f3d0,#a5f3fc)'],
+  book:['#e0b872','linear-gradient(135deg,#7a4b1e,#e0b872 50%,#5a3412)'],
+  dragon:['#ff4d2e','radial-gradient(circle at 35% 30%,#ffe08a,#ff4d2e 45%,#5a0a00)'],
+  void:['#c084fc','radial-gradient(circle,#000 30%,#3b0764 65%,#c084fc)'],
   rainbow:['#ff5ec8','conic-gradient(red,orange,yellow,lime,cyan,blue,magenta,red)'],
   fire:['#ff6a1a','radial-gradient(#fff3a0,#ff8a00 45%,#b31200)'],
   thunder:['#fde047','linear-gradient(135deg,#1e3a8a,#60a5fa 45%,#fde047 50%,#1e3a8a 60%)'],
@@ -445,7 +521,7 @@ const MUT={};MUTS.forEach(m=>MUT[m.id]=m);
 // ивенты от администратора
 const EVENTS={luck:{mult:1,until:0},mut:{mult:1,until:0}};
 const evOn=k=>Date.now()<EVENTS[k].until;
-const mutCh=id=>MUT[id].ch*(evOn('mut')?EVENTS.mut.mult:1);
+const mutCh=id=>MUT[id].ch*(evOn('mut')?EVENTS.mut.mult:1)*(L().mutX||1);
 const noMutCh=()=>1-MUTS.reduce((s,m)=>s+mutCh(m.id),0);
 const REVEAL_FROM=50;
 const TIERS=[1e3,1e4,1e5,1e6,1e7];
@@ -456,7 +532,7 @@ const mutCol=(m,R)=>m?MUT[m].c:R.c;
 const KEY='lassoRanch_v1';
 
 // ======================= СОСТОЯНИЕ =======================
-let S={v:2,money:0,lasso:0,cagesOpen:2,cages:Array(8).fill(null),found:{},caught:0,last:Date.now()};
+let S={v:2,eq:null,hl:{},st:null,money:0,lasso:0,cagesOpen:2,cages:Array(8).fill(null),found:{},caught:0,last:Date.now()};
 function load(){
   try{const d=JSON.parse(localStorage.getItem(KEY));
     if(d){Object.assign(S,d);while(S.cages.length<8)S.cages.push(null);
@@ -465,6 +541,7 @@ function load(){
       S.lasso=Math.min(S.lasso,LASSOS.length-1);
       S.cages=S.cages.map(it=>it&&DEF[it.id]?it:null);}
   }catch(e){}
+  S.hl=S.hl||{};S.st=Object.assign({night:0,maxOdds:0,blocks:0,miss:0,esc:0,run:0,muts:{}},S.st||{});
 }
 function save(){S.last=Date.now();S.lb=blocks.map(b=>b.t);try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
 function resetGame(){if(confirm('Точно сбросить весь прогресс?')){localStorage.removeItem(KEY);S=null;location.reload();}}
@@ -473,14 +550,14 @@ window.addEventListener('beforeunload',()=>{if(S)save();});
 const itemInc=it=>DEF[it.id].inc*(it.mut?MUT[it.mut].mult:1);
 const itemSell=it=>itemInc(it)*SELL_MULT;
 const totalInc=()=>S.cages.reduce((s,it,i)=>s+(it&&i<S.cagesOpen?itemInc(it):0),0);
-const L=()=>LASSOS[S.lasso];
+const L=()=>(S.eq&&HL[S.eq]&&S.hl&&S.hl[S.eq])?HL[S.eq]:LASSOS[S.lasso];
 function fmt(n){
   if(n<1000)return(n<10&&n%1)?n.toFixed(1):Math.floor(n).toString();
   const u=['K','M','B','T','Qa','Qi'];let i=-1;
   while(n>=1000&&i<u.length-1){n/=1000;i++;}
   return n.toFixed(n<10?2:n<100?1:0)+u[i];
 }
-function luckNow(){let l=L().luck;if(evOn('luck'))l=Math.min(3,l*(1+(EVENTS.luck.mult-1)*.25));return l;}
+function luckNow(){let l=L().luck;if(L().night&&ENV.night>.5)l*=L().night;if(evOn('luck'))l=Math.min(3,l*(1+(EVENTS.luck.mult-1)*.25));return l;}
 function weights(){const lk=luckNow();return ANIMALS.map(a=>RAR[a.r].w*Math.pow(lk,a.r)/RCOUNT[a.r]);}
 function pickDef(){
   const w=weights();let s=w.reduce((a,b)=>a+b,0),r=Math.random()*s;
@@ -767,6 +844,15 @@ function updateAnimals(dt){
 // ======================= ЛАССО =======================
 function lassoColor(){
   const c=L().col;
+  if(c==='moon')return`hsl(215,70%,${78+Math.sin(time*3)*12}%)`;
+  if(c==='clover')return`hsl(${130+Math.sin(time*4)*12},80%,${55+Math.sin(time*9)*8}%)`;
+  if(c==='box')return Math.sin(time*10)>0?'#ffcc2e':'#ff9f1a';
+  if(c==='shadow')return`hsl(275,70%,${28+Math.random()*14}%)`;
+  if(c==='speed')return Math.random()<.5?'#fff59f':'#7dd3fc';
+  if(c==='prism')return`hsl(${(time*260)%360},90%,82%)`;
+  if(c==='book')return`hsl(35,${55+Math.sin(time*3)*10}%,62%)`;
+  if(c==='dragon')return`hsl(${10+Math.sin(time*12)*14},100%,${50+Math.sin(time*25)*8}%)`;
+  if(c==='void')return`hsl(${275+Math.sin(time*2)*15},90%,${18+Math.sin(time*6)*10}%)`;
   if(c==='rainbow')return`hsl(${(time*160)%360},95%,60%)`;
   if(c==='cosmic')return`hsl(${250+Math.sin(time*3)*40},90%,${65+Math.sin(time*7)*12}%)`;
   if(c==='fire')return`hsl(${18+Math.sin(time*9)*16},100%,${55+Math.sin(time*23)*8}%)`;
@@ -787,7 +873,7 @@ function throwLasso(p){
   const dist=Math.hypot(tx-HAND.x,ty-HAND.y);
   Object.assign(lasso,{state:'fly',p:0,sx:HAND.x,sy:HAND.y-40,tx,ty,dur:dist/L().spd+0.08,arc:dist*0.28,a:null});
   for(const b of blocks){if(b.open||!b.landed)continue;const d=depth(b.y),by=b.y-(b.z+22)*d;
-    if(Math.hypot(b.x-tx,by-ty)<170&&Math.random()<b.B.dodge){
+    if(!L().noDodge&&Math.hypot(b.x-tx,by-ty)<170&&Math.random()<b.B.dodge){
       const delay=rand(.05,.35)*1000;setTimeout(()=>{if(b.open)return;const ang=Math.atan2(by-ty,b.x-tx)+rand(-.6,.6),sp=b.B.spd*rand(2.6,3.6);
         b.vx=Math.cos(ang)*sp;b.vy=Math.sin(ang)*sp*.7;b.dash=.45;b.tx=clamp(b.x+Math.cos(ang)*220,70,W-70);b.ty=clamp(b.y+Math.sin(ang)*120,FIELD_TOP+25,FIELD_BOT);b.tt=1.2;b.zt=rand(40,100);
         floatText(b.x,by-30*d,'💨','#fff');},delay);}}
@@ -799,7 +885,7 @@ function resolveThrow(){
   let best=null,bd=1e9;
   for(const a of animals){if(a.test)continue;const d=inZone(a,lasso.tx,lasso.ty);if(d>=0&&d<bd){bd=d;best=a;}}
   if(!best){
-    floatText(lasso.tx,lasso.ty-20,'Мимо!','#e8e8e8');
+    floatText(lasso.tx,lasso.ty-20,'Мимо!','#e8e8e8');S.st.miss++;checkHidden();
     for(let i=0;i<12;i++){const an=i/12*Math.PI*2;wParticles.push({x:lasso.tx+Math.cos(an)*10,y:lasso.ty+Math.sin(an)*4,r:3,vr:12,life:.6,max:.6,vx:Math.cos(an)*40,vy:Math.sin(an)*12});}
     goBack();return;
   }
@@ -814,7 +900,7 @@ function resolveThrow(){
     cam.punch=.035;beep(880,.1,'triangle',.05);
   }else{
     best.flee=2.2;best.pause=0;
-    floatText(lasso.tx,lasso.ty-30,'Вырвался!','#ff7b6b');
+    floatText(lasso.tx,lasso.ty-30,'Вырвался!','#ff7b6b');S.st.esc++;checkHidden();
     cam.shake=.5;beep(160,.18,'sawtooth',.04);
     goBack();
   }
@@ -1057,7 +1143,7 @@ function drawRope(c,x,y,loopR,tight){
   trail.forEach((t,i)=>{c.globalAlpha=(i+1)/trail.length*.25;c.strokeStyle=col;c.lineWidth=2;ell(c,t.x,t.y,t.r,t.r*.6);c.stroke();});c.globalAlpha=1;
   ropeStroke(c,()=>{c.beginPath();c.moveTo(h.x,h.y);c.quadraticCurveTo(cx,cy,x,y+(tight?0:loopR*.6));},col,3.4);
   ropeStroke(c,()=>ell(c,x,y,loopR,loopR*.6),col,3.4);
-  if(['fire','thunder','cosmic','divine','infinite','rainbow'].includes(L().col)&&Math.random()<.6)
+  if(['fire','thunder','cosmic','divine','infinite','rainbow','moon','clover','box','shadow','speed','prism','book','dragon','void'].includes(L().col)&&Math.random()<.6)
     particles.push({t:'star',x:x+rand(-loopR,loopR),y:y+rand(-loopR*.5,loopR*.5),vx:0,vy:-20,life:.5,col,sz:rand(2,3.5),g:0});
 }
 function drawIdleTwirl(c){
@@ -1313,15 +1399,29 @@ function renderShop(){
   $('shop').innerHTML=LASSOS.map((l,i)=>{
     const U=LASSO_UI[l.col],col=U?U[0]:l.col;
     let act='',prog='';
-    if(i===S.lasso)act=`<span class="chip" style="background:linear-gradient(180deg,#ffdf6e,#f2a51a);color:#2a1b0f">В руках</span>`;
+    if(i===S.lasso)act=S.eq?`<button class="btn" onclick="equipNormal()">Надеть</button>`:`<span class="chip" style="background:linear-gradient(180deg,#ffdf6e,#f2a51a);color:#2a1b0f">В руках</span>`;
     else if(i<S.lasso)act=`<span class="chip">✔</span>`;
     else if(i===S.lasso+1){act=`<button class="btn" data-price="${l.p}" onclick="buyLasso(${i})">${fmt(l.p)} $</button>`;prog=`<div class="prog"><i data-prog="${l.p}"></i></div>`;}
     else act=`<span class="chip">🔒 ${fmt(l.p)} $</span>`;
-    return`<div class="shopItem ${i===S.lasso?'cur':''} ${i===S.lasso+1?'next':''} ${i>S.lasso+1?'lock':''}">
+    return`<div class="shopItem ${i===S.lasso&&!S.eq?'cur':''} ${i===S.lasso+1?'next':''} ${i>S.lasso+1?'lock':''}">
       ${lassoIcon(l)}
       <div class="info"><b style="color:${col}">${l.n}</b>⭕ ${l.rad} · 🍀 x${l.luck.toFixed(2)} · ✊ ${Math.round(l.cat*100)}%${prog}</div>${act}</div>`;
-  }).join('')+`<div class="hint">🍀 Удача повышает шанс появления редких животных.<br>✊ Хват — шанс, что животное не вырвется (редкие вырываются чаще).<br>⭕ Петля — размер зоны захвата.</div>`;
+  }).join('')+renderHidden()+`<div class="hint">🍀 Удача повышает шанс появления редких животных.<br>✊ Хват — шанс, что животное не вырвется (редкие вырываются чаще).<br>⭕ Петля — размер зоны захвата.</div>`;
   updateMoneyUI();
+}
+function renderHidden(){
+  const n=HLS.filter(h=>S.hl[h.id]).length;
+  return`<div class="hlHead">🕵️ Секретные лассо <span>${n} / ${HLS.length}</span></div><div class="hint" style="margin:-2px 0 8px">Их нельзя купить — только заслужить. Выполни тайное условие.</div>`+
+  HLS.map(h=>{
+    const own=!!S.hl[h.id],[c,m]=hlProg(h.id),pct=Math.min(100,c/m*100),cur=own&&S.eq===h.id;
+    const veiled=h.id==='void'&&HLS.filter(x=>S.hl[x.id]).length<4&&!own;
+    if(!own)return`<div class="shopItem hlItem locked"><div class="ico hlq">❓</div>
+      <div class="info"><b>??? Секретное лассо</b><span class="hlHint">${veiled?'Эта тайна откроется, когда раскроешь 4 других…':h.hint}</span>
+      ${veiled?'':`<div class="prog hp"><i style="width:${pct}%"></i></div><span class="hlP">${h.id==='clover'?'лучший шанс: 1 из '+fmt(c):fmt(c)+' / '+fmt(m)}</span>`}</div></div>`;
+    return`<div class="shopItem hlItem ${cur?'cur':''}">${lassoIcon(h)}
+      <div class="info"><b class="hlName">${h.ic} ${h.n}</b>⭕ ${h.rad} · 🍀 x${h.luck.toFixed(2)} · ✊ ${h.cat>=2?'MAX':Math.round(h.cat*100)+'%'} · 💨 ${h.spd}<span class="hlPerk">✨ ${h.perk}</span></div>
+      ${cur?`<span class="chip" style="background:linear-gradient(180deg,#f0c8ff,#b46cf0);color:#2a0f3b">В руках</span>`:`<button class="btn" style="background:linear-gradient(180deg,#f0c8ff,#b46cf0);--sh:#6b2a99" onclick="equipHidden('${h.id}')">Надеть</button>`}</div>`;
+  }).join('');
 }
 function renderBook(){
   const w=weights(),sum=w.reduce((a,b)=>a+b,0);
@@ -1343,7 +1443,7 @@ document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
 // ---------- действия ----------
 function buyLasso(i){
   const l=LASSOS[i];if(i!==S.lasso+1||S.money<l.p)return;
-  S.money-=l.p;S.lasso=i;save();renderAll();
+  S.money-=l.p;S.lasso=i;S.eq=null;save();renderAll();
   const col=LASSO_UI[l.col]?LASSO_UI[l.col][0]:l.col;
   burst(HAND.x,HAND.y-50,col,60);confetti(HAND.x,HAND.y-60,60);rings.push({x:HAND.x,y:HAND.y-50,r:10,vr:300,life:.7,max:.7,col});
   toast(`🪢 Новое лассо: ${l.n}!`,'#ffcf3f');fanfare(3,false);
@@ -1363,10 +1463,14 @@ function sellCage(i,btn){
 }
 function coinSound(){beep(988,.08,'square',.03);beep(1319,.18,'square',.03,.07);}
 const freeCage=()=>{for(let i=0;i<S.cagesOpen;i++)if(!S.cages[i])return i;return -1;};
+const runT=[];
 function onCatch(a){
   const isNew=!S.found[a.def.id];
   S.found[a.def.id]=(S.found[a.def.id]||0)+1;S.caught++;
   pending={id:a.def.id,mut:a.mut,odds:a.odds,isNew};
+  {const st=S.st;if(ENV.night>.5)st.night++;if(a.mut)st.muts[a.mut]=1;st.maxOdds=Math.max(st.maxOdds,a.odds);
+   const now=Date.now();runT.push(now);while(runT.length&&now-runT[0]>25000)runT.shift();st.run=Math.max(st.run,runT.length);
+   checkHidden();}
   if(!S.best||a.odds>S.best.o)S.best={a:a.def.id,m:a.mut||null,o:a.odds};
   if(a.odds>=REVEAL_FROM)netSend('feed',{t:'catch',a:a.def.id,m:a.mut||null,o:a.odds});
   pubProfile();
@@ -1692,7 +1796,7 @@ function updateBlocks(dt){
         b.tx=rand(70,W-70);b.ty=rand(FIELD_TOP+25,FIELD_BOT);b.zt=rand(28,100);b.tt=rand(1.5,3.5);
         if(B.tier>=2&&Math.random()<.25+B.tier*.08)b.dash=rand(.35,.7);}
       if(b.dash>0)b.dash-=dt;
-      const sp=B.spd*(b.dash>0?2.3:1),dx=b.tx-b.x,dy=b.ty-b.y,dl=Math.hypot(dx,dy)||1;
+      const sp=B.spd*(b.dash>0?2.3:1)*(L().noDodge?.6:1),dx=b.tx-b.x,dy=b.ty-b.y,dl=Math.hypot(dx,dy)||1;
       const k=Math.min(1,dt*(b.dash>0?6:2.4));
       b.vx=(b.vx||0)+(dx/dl*sp-(b.vx||0))*k;b.vy=(b.vy||0)+(dy/dl*sp*.6-(b.vy||0))*k;
       if(b.dodgeT>0){b.dodgeT-=dt;}
@@ -1773,7 +1877,7 @@ function hitBlock(b){
   cam.punch=.03;
 }
 function blockPool(B){
-  const lk=luckNow()*B.luck,list=[];let tot=0;
+  const lk=luckNow()*B.luck*(L().boxLuck||1),list=[];let tot=0;
   for(const a of ANIMALS){if(a.r<B.minR||a.r>B.maxR)continue;const w=RAR[a.r].w*Math.pow(lk,a.r)/RCOUNT[a.r];list.push([a,w]);tot+=w;}
   return{list,tot};
 }
@@ -1787,7 +1891,7 @@ function blockRoll(B){
 function rollOutcome(B){let r=Math.random();for(const k in B.p){if(r<B.p[k])return k;r-=B.p[k];}return'animal';}
 function openBlock(b){
   const B=b.B,d=depth(b.y),bx=b.x,by=b.y-(b.z+24)*d;
-  blocks.splice(blocks.indexOf(b),1);
+  blocks.splice(blocks.indexOf(b),1);S.st.blocks++;setTimeout(checkHidden,1500);
   // взрыв блока
   burst(bx,by,lbCol(B),50+B.tier*20);confetti(bx,by,40+B.tier*20);starBurst(bx,by,'#fff',20);
   for(let i=0;i<8;i++)particles.push({t:'conf',x:bx+rand(-20,20),y:by+rand(-20,20),vx:rand(-260,260),vy:rand(-420,-160),life:1.4,col:i%2?lbCol(B):(B.c2||'#fff'),sz:rand(10,16)*d,g:900,rot:rand(0,6),vrot:rand(-14,14)});
@@ -1914,6 +2018,9 @@ function netMsg(topic,txt){
 function onFeed(m){
   const name=okStr(m.n,16)||'???';
   if(m.t==='chat'){const x=okStr(m.x,120).trim();if(!x)return;addFeed(`<b>${esc(name)}:</b> ${esc(x)}`);}
+  else if(m.t==='hl'){const h=HL[m.h];if(!h)return;
+    addFeed(`🔓 <b>${esc(name)}</b> открыл секретное лассо <span style="color:#e9b6ff">${h.ic} ${h.n}</span>!`,'catch');
+    if(m.id!==ME.id)toast(`🔓 ${esc(name)} открыл секретное лассо ${h.ic} ${h.n}!`,'#e9b6ff');}
   else if(m.t==='catch'){
     const d=DEF[m.a];if(!d)return;const mut=MUT[m.m]?m.m:null,o=Math.max(1,okNum(m.o)|0),R=RAR[d.r];
     const what=`${mut?MUT[mut].icon+' ':''}${d.e} <span style="color:${mutCol(mut,R)}">${esc(d.n)}</span>`;
@@ -2030,7 +2137,7 @@ function spawnSpecific(id,mut){
 function renderAdmin(){setTimeout(()=>{const s=$('admBlock');if(s){s.onchange=blockInfo;blockInfo();}},0);
   const animOpts=ANIMALS.map(a=>`<option value="${a.id}" ${a.id==='trex'?'selected':''}>${a.e} ${a.n} (${RAR[a.r].n})</option>`).join('');
   const mutOpts=`<option value="">Без мутации</option>`+MUTS.map(m=>`<option value="${m.id}" ${m.id==='rainbow'?'selected':''}>${m.icon} ${m.n}</option>`).join('');
-  const lassoOpts=LASSOS.map((l,i)=>`<option value="${i}" ${i===S.lasso?'selected':''}>${l.n}</option>`).join('');
+  const lassoOpts=LASSOS.map((l,i)=>`<option value="${i}" ${i===S.lasso?'selected':''}>${l.n}</option>`).join('')+HLS.map(h=>`<option value="s:${h.id}">🕵️ ${h.ic} ${h.n}</option>`).join('');
   $('adminPanel').innerHTML=`
   <div class="card adminBox gold"><h4>👑 Ты администратор</h4><div class="hint" style="margin-top:4px">Команды «🌍 Всем» подписаны твоим секретным ключом — другие игроки не могут их подделать. Никому не показывай код!</div></div>
   <div class="card adminBox"><h4>🐾 Призыв животного</h4>
@@ -2068,7 +2175,9 @@ function admEvent(){const type=$('evType').value,mult=+$('evMult').value,min=+$(
 function admStop(){for(const type of ['luck','mut'])adminSend({cmd:'event',type,mult:1,until:Date.now()-1},`${T}/ev/${type}`,true);}
 function admMoney(all){const v=clamp(+$('admMoney').value||0,0,1e15);if(all)adminSend({cmd:'money',amount:v});else{S.money+=v;coinSound();toast(`💰 +${fmt(v)} $`);}}
 function admSay(){const x=$('admSay').value.trim().slice(0,140);if(!x)return;adminSend({cmd:'say',text:x});$('admSay').value='';}
-function admLasso(){S.lasso=clamp(+$('admLasso').value,0,LASSOS.length-1);save();renderAll();toast('🪢 '+L().n);}
+function admLasso(){const v=$('admLasso').value;
+  if(v.startsWith('s:')){const id=v.slice(2);unlockHidden(id,true);equipHidden(id);return;}
+  S.lasso=clamp(+v,0,LASSOS.length-1);S.eq=null;save();renderAll();toast('🪢 '+L().n);}
 function admCages(){S.cagesOpen=8;save();renderCages();toast('🔓 Все 8 клеток открыты');}
 function admTime(t){time=((t-0.06+1)%1)*CYCLE;}
 $('chatIn').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
@@ -2084,6 +2193,7 @@ load();
 shownMoney=prevMoney=S.money;
 for(let i=0;i<4;i++)spawn(true);
 (S.lb||[]).forEach(t=>spawnBlock(t,true));
+setTimeout(checkHidden,2000);
 computeEnv();
 renderAll();
 requestAnimationFrame(loop);
