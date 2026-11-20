@@ -522,8 +522,21 @@ const MUTS=[
 const MUT={};MUTS.forEach(m=>MUT[m.id]=m);
 // ивенты от администратора
 const EVENTS={luck:{mult:1,until:0},mut:{mult:1,until:0}};
+// мега-ивенты (с визуалом и музыкой)
+const BIG_EV={
+ blood:  {n:'Кровавая луна',     ic:'🌑',c:'#ff4a4a',d:'Вечная ночь, удача ×1.5, Проповедник тьмы приходит в 5 раз чаще',luck:1.5,boss:5},
+ rainbow:{n:'Радужный дождь',    ic:'🌈',c:'#ff8fd1',d:'Мутации выпадают ×3',mut:3},
+ meteor: {n:'Звездопад',         ic:'☄️',c:'#8ab4ff',d:'Удача ×2 — космические и секретные звери чаще',luck:2},
+ gold:   {n:'Золотая лихорадка', ic:'💰',c:'#ffd23f',d:'Весь доход ×3, с неба сыплются монеты',inc:3},
+ disco:  {n:'Дискотека',         ic:'🪩',c:'#d17bff',d:'Каждые 20 секунд с неба падает лаки блок',disco:1},
+ snow:   {n:'Снежная буря',      ic:'❄️',c:'#bfe6ff',d:'Звери замёрзли: ходят медленнее, хват +15%',slow:.5,grip:.15},
+ storm:  {n:'Гроза',             ic:'⛈️',c:'#9fd8ff',d:'Молнии бьют в зверей и дают им мутации',storm:1},
+};
+for(const k in BIG_EV)EVENTS[k]={mult:1,until:0,start:0};
+const bigMul=prop=>{let m=1;for(const k in BIG_EV)if(BIG_EV[k][prop]&&Date.now()<EVENTS[k].until)m*=BIG_EV[k][prop];return m;};
+const incMult=()=>bigMul('inc');
 const evOn=k=>Date.now()<EVENTS[k].until;
-const mutCh=id=>MUT[id].ch*(evOn('mut')?EVENTS.mut.mult:1)*(L().mutX||1);
+const mutCh=id=>MUT[id].ch*(evOn('mut')?EVENTS.mut.mult:1)*(L().mutX||1)*bigMul('mut');
 const noMutCh=()=>1-MUTS.reduce((s,m)=>s+mutCh(m.id),0);
 const REVEAL_FROM=50;
 const TIERS=[1e3,1e4,1e5,1e6,1e7];
@@ -559,8 +572,8 @@ function fmt(n){
   while(n>=1000&&i<u.length-1){n/=1000;i++;}
   return n.toFixed(n<10?2:n<100?1:0)+u[i];
 }
-function luckNow(){let l=L().luck;if(L().night&&ENV.night>.5)l*=L().night;if(evOn('luck'))l=Math.min(3,l*(1+(EVENTS.luck.mult-1)*.25));return l;}
-function weights(){const lk=luckNow();return ANIMALS.map(a=>a.boss?RAR[a.r].w*Math.pow(lk,3):RAR[a.r].w*Math.pow(lk,a.r)/RCOUNT[a.r]);}
+function luckNow(){let l=L().luck;if(L().night&&ENV.night>.5)l*=L().night;if(evOn('luck'))l=Math.min(3,l*(1+(EVENTS.luck.mult-1)*.25));l*=1+(bigMul('luck')-1)*.35;return Math.min(4,l);}
+function weights(){const lk=luckNow();return ANIMALS.map(a=>a.boss?RAR[a.r].w*Math.pow(lk,3)*bigMul('boss'):RAR[a.r].w*Math.pow(lk,a.r)/RCOUNT[a.r]);}
 function pickDef(){
   const w=weights();let s=w.reduce((a,b)=>a+b,0),r=Math.random()*s;
   for(let i=0;i<w.length;i++){r-=w[i];if(r<=0)return ANIMALS[i];}
@@ -573,6 +586,7 @@ function oddsOf(def,mut){
 const fmtOdds=n=>n.toLocaleString('ru-RU');
 function catchChance(a){
   if(a.def.boss)return 0.01;
+  if(bigMul('grip')>1)return Math.max(0.05,Math.min(0.97,L().cat+.15-RAR[a.def.r].d-(a.mut?0.03+MUTS.indexOf(MUT[a.mut])*0.03:0)));
   return Math.max(0.05,Math.min(0.97,L().cat-RAR[a.def.r].d-(a.mut?0.03+MUTS.indexOf(MUT[a.mut])*0.03:0)));
 }
 
@@ -810,6 +824,9 @@ function computeEnv(){
   const A=KF[i],B=KF[i+1],k=(t-A[0])/(B[0]-A[0]||1),e=k*k*(3-2*k);
   ENV={t,top:mixC(hx(A[1]),hx(B[1]),e),bot:mixC(hx(A[2]),hx(B[2]),e),tint:mixC(A[3],B[3],e),ta:lerp(A[4],B[4],e),night:lerp(A[5],B[5],e)};
   ENV.phase=t<.44?'☀️ День':t<.56?'🌅 Закат':t<.9?'🌙 Ночь':'🌄 Рассвет';
+  for(const k in EV_ENV){const e=evK[k]||0;if(e<=.001)continue;const o=EV_ENV[k];
+    ENV.top=mixC(ENV.top,o.top,e);ENV.bot=mixC(ENV.bot,o.bot,e);ENV.tint=mixC(ENV.tint,o.tint,e);ENV.ta=lerp(ENV.ta,o.ta,e);ENV.night=lerp(ENV.night,o.night,e);
+    if(e>.5)ENV.phase=BIG_EV[k].ic+' '+BIG_EV[k].n;}
 }
 
 // ======================= ЖИВОТНЫЕ =======================
@@ -834,7 +851,7 @@ function updateAnimals(dt){
     if(a.flee>0)a.flee-=dt;
     if(a.def.boss)a.pause=0;
     if(a.pause>0&&a.flee<=0){a.pause-=dt;continue;}
-    const d=depth(a.y),m=a.flee>0?2.4:1;
+    const d=depth(a.y),m=(a.flee>0?2.4:1)*bigMul('slow');
     a.x+=a.vx*dt*d*m;a.y+=a.vy*dt*m;
     if(a.y<FIELD_TOP){a.y=FIELD_TOP;a.vy=Math.abs(a.vy);}
     if(a.y>FIELD_BOT){a.y=FIELD_BOT;a.vy=-Math.abs(a.vy);}
@@ -964,7 +981,8 @@ function drawSky(c){
   if(ENV.night>0.02){for(const s of stars){c.globalAlpha=ENV.night*(.5+.5*Math.sin(time*2+s.p));c.fillStyle='#fff';c.beginPath();c.arc(s.x,s.y,s.r,0,7);c.fill();}c.globalAlpha=1;}
   // солнце
   const t=ENV.t;
-  if(t<.56||t>.93){const u=(t>.9?t-1+.04:t+.04)/.6,sx=lerp(70,W-70,u),sy=HORIZON+8-Math.sin(u*Math.PI)*(HORIZON-22);
+  const evHide=Math.max(0,...['blood','meteor','storm','disco'].map(k=>(typeof evK!=='undefined'&&evK[k])||0));
+  if((t<.56||t>.93)&&evHide<.98){c.save();c.globalAlpha=1-evHide;const u=(t>.9?t-1+.04:t+.04)/.6,sx=lerp(70,W-70,u),sy=HORIZON+8-Math.sin(u*Math.PI)*(HORIZON-22);
     const warm=clamp((t-.38)/.16,0,1);
     const gg=c.createRadialGradient(sx,sy,4,sx,sy,90);gg.addColorStop(0,`rgba(255,${245-warm*80},${200-warm*120},.9)`);gg.addColorStop(.2,`rgba(255,${230-warm*90},${150-warm*100},.35)`);gg.addColorStop(1,'rgba(255,200,120,0)');
     c.fillStyle=gg;c.beginPath();c.arc(sx,sy,90,0,7);c.fill();
@@ -973,7 +991,7 @@ function drawSky(c){
     c.save();c.globalCompositeOperation='lighter';c.translate(sx,sy);c.rotate(time*.05);
     for(let i=0;i<10;i++){c.rotate(Math.PI*2/10);const lg=c.createLinearGradient(0,0,190,0);lg.addColorStop(0,`rgba(255,240,200,${.10*(1-warm*.5)})`);lg.addColorStop(1,'rgba(255,240,200,0)');
       c.fillStyle=lg;c.beginPath();c.moveTo(0,0);c.lineTo(190,-14);c.lineTo(190,14);c.closePath();c.fill();}
-    c.restore();
+    c.restore();c.restore();
   }
   // луна
   if(t>.53&&t<.97){const u=(t-.53)/.44,mx=lerp(70,W-70,u),my=HORIZON+8-Math.sin(u*Math.PI)*(HORIZON-24);
@@ -1280,8 +1298,10 @@ function render(dt){
   const z=1+cam.punch,sx=(Math.random()-.5)*cam.shake*14,sy=(Math.random()-.5)*cam.shake*10;
   ctx.setTransform(z,0,0,z,W/2*(1-z)+sx,H/2*(1-z)+sy);
   drawSky(ctx);
+  drawEvSky(ctx);
   ctx.drawImage(wCv,0,0);
   drawLights(ctx);
+  drawEvFront(ctx);
   gameBolts.forEach(b=>strokeBolt(ctx,b));
   drawAim(ctx);
   drawParticles(ctx);
@@ -1290,12 +1310,14 @@ function render(dt){
   ctx.drawImage(vgCv,0,0);
   if(gameFlash>0){ctx.fillStyle=`rgba(255,255,255,${gameFlash})`;ctx.fillRect(0,0,W,H);}
   pill(ctx,12,24,ENV.phase);
-  {let ey=24;for(const [k,ic,nm] of [['luck','🍀','Ивент удачи'],['mut','🧬','Ивент мутаций']]){if(!evOn(k))continue;
-    const ms=EVENTS[k].until-Date.now(),t=`${ic} ${nm} ×${EVENTS[k].mult} · ${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
-    ctx.font=`900 15px ${UIFONT}`;const tw=ctx.measureText(t).width+26,x=W/2-tw/2;
-    ctx.fillStyle='rgba(40,25,5,.75)';ctx.beginPath();ctx.roundRect(x,ey-15,tw,30,15);ctx.fill();
-    ctx.strokeStyle=`hsl(${45+Math.sin(time*4)*10},100%,60%)`;ctx.lineWidth=2;ctx.stroke();
-    ctx.fillStyle='#ffe58a';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,W/2,ey+1);ey+=36;}}
+  {let ey=24;const list=[['luck','🍀','Ивент удачи',null],['mut','🧬','Ивент мутаций',null],...Object.entries(BIG_EV).map(([k,v])=>[k,v.ic,v.n,v.c])];
+    const act=list.filter(([k])=>evOn(k)),small=act.length>2;
+    for(const [k,ic,nm,col] of act){
+    const ms=EVENTS[k].until-Date.now(),t=`${ic} ${nm}${col?'':' ×'+EVENTS[k].mult} · ${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
+    ctx.font=`900 ${small?13:15}px ${UIFONT}`;const tw=ctx.measureText(t).width+26,x=W/2-tw/2,hh=small?24:30;
+    ctx.fillStyle='rgba(30,18,5,.78)';ctx.beginPath();ctx.roundRect(x,ey-hh/2,tw,hh,hh/2);ctx.fill();
+    ctx.strokeStyle=col||`hsl(${45+Math.sin(time*4)*10},100%,60%)`;ctx.lineWidth=2;ctx.globalAlpha=.75+.25*Math.sin(time*4);ctx.stroke();ctx.globalAlpha=1;
+    ctx.fillStyle=col||'#ffe58a';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,W/2,ey+1);ey+=hh+5;}}
   drawBossHud(ctx);
   if(lasso.state==='idle'&&blocks.some(b=>!b.open)&&!modalOpen&&S.caught>0){
     ctx.font=`900 15px ${UIFONT}`;const t='🎁 Накинь лассо на лаки блок!';
@@ -1322,7 +1344,7 @@ function loop(now){
   birds.forEach(b=>b.x+=b.v*dt);birds=birds.filter(b=>b.x>-60&&b.x<W+60);
   fireflies.forEach(f=>{f.vx+=rand(-20,20)*dt;f.vy+=rand(-20,20)*dt;f.vx=clamp(f.vx,-14,14);f.vy=clamp(f.vy,-10,10);f.x+=f.vx*dt;f.y+=f.vy*dt;
     if(f.x<0)f.x=W;if(f.x>W)f.x=0;if(f.y<FIELD_TOP-30||f.y>FENCE_Y+30)f.vy*=-1;});
-  updateAnimals(dt);updateBlocks(dt);updateLasso(dt);
+  updateAnimals(dt);updateBlocks(dt);updateLasso(dt);evTick(dt);
   particles.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=(p.g||0)*dt;p.life-=dt;if(p.t==='conf'){p.rot+=p.vrot*dt;p.vx*=.985;}});
   particles=particles.filter(p=>p.life>0);
   if(particles.length>700)particles.splice(0,particles.length-700);
@@ -1332,7 +1354,7 @@ function loop(now){
   gameBolts.forEach(b=>b.life-=dt*b.decay);gameBolts=gameBolts.filter(b=>b.life>0);
   if(gameFlash>0)gameFlash=Math.max(0,gameFlash-dt*2.5);
   cam.punch*=Math.pow(.02,dt);cam.shake=Math.max(0,cam.shake-dt*2);
-  S.money+=totalInc()*dt;
+  S.money+=totalInc()*incMult()*dt;
   uiT-=dt;if(uiT<=0){uiT=.08;updateMoneyUI();evWatch();sbTick();}
   cashT-=dt;if(cashT<=0){cashT=2;cageCash();}
   saveT-=dt;if(saveT<=0){saveT=5;save();}
@@ -1358,7 +1380,7 @@ function updateMoneyUI(){
   prevMoney=S.money;
   shownMoney=Math.abs(diff)<1?S.money:shownMoney+diff*.35;
   $('money').textContent=fmt(shownMoney);
-  $('inc').textContent=fmt(totalInc());
+  $('inc').textContent=fmt(totalInc()*incMult())+(incMult()>1?' 🔥':'');
   $('caught').textContent=S.caught;
   document.querySelectorAll('[data-price]').forEach(b=>b.disabled=S.money<+b.dataset.price);
   document.querySelectorAll('[data-prog]').forEach(i=>i.style.width=Math.min(100,S.money/+i.dataset.prog*100)+'%');
@@ -1540,9 +1562,9 @@ function fanfare(r,mut){
   notes.forEach((n,i)=>beep(base*Math.pow(2,n/12),.35,'triangle',.07,i*.09));
   beep(base/2,.6,'sawtooth',.03,notes.length*.09);
 }
-function toggleMute(){muted=!muted;localStorage.setItem('lr_mute',muted?'1':'0');$('mute').textContent=muted?'🔇':'🔊';}
+function toggleMute(){muted=!muted;localStorage.setItem('lr_mute',muted?'1':'0');$('mute').textContent=muted?'🔇':'🔊';Music.sync();}
 $('mute').textContent=muted?'🔇':'🔊';
-document.addEventListener('pointerdown',()=>{if(!muted)ac();},{once:true});
+document.addEventListener('pointerdown',()=>{if(!muted){const a=ac();if(a&&a.resume)a.resume().then(()=>Music.sync()).catch(()=>{});}},{once:true});
 
 // ======================= АНИМАЦИЯ ПОЯВЛЕНИЯ «1 из N» =======================
 const revealQ=[];let revealing=false;
@@ -1773,6 +1795,168 @@ function drawBossHud(c){
 let bossDim=0;
 function addBossFeed(caught){}
 
+
+// ======================= МЕГА-ИВЕНТЫ: ВИЗУАЛ =======================
+const EV_ENV={
+  blood:{top:[22,0,8],bot:[85,8,18],tint:[95,0,18],ta:.56,night:1},
+  meteor:{top:[6,8,30],bot:[38,30,78],tint:[14,18,62],ta:.56,night:1},
+  storm:{top:[52,56,70],bot:[92,96,108],tint:[22,26,44],ta:.46,night:.55},
+  snow:{top:[165,185,212],bot:[222,232,244],tint:[215,232,255],ta:.32,night:0},
+  disco:{top:[20,6,40],bot:[70,20,90],tint:[38,8,66],ta:.52,night:1},
+};
+const evK={};let evP=[],evT={disco:12,storm:3,bat:2};
+function evIntro(k){
+  gameFlash=.7;cam.shake=.6;
+  if(k==='storm'||k==='blood')thunder(1.4);
+  confetti(W/2,FIELD_TOP,60);
+}
+function evTick(dt){
+  for(const k in BIG_EV){const on=evOn(k)?1:0;evK[k]=lerp(evK[k]||0,on,Math.min(1,dt*.8));if(!on&&evK[k]<.002)evK[k]=0;}
+  const r=(n)=>Math.random()<n*dt;
+  if(evK.storm>.05){const nn=260*evK.storm*dt,n=Math.floor(nn)+(Math.random()<nn%1?1:0);for(let i=0;i<n;i++)evP.push({k:'rain',x:rand(-100,W),y:rand(-40,0),vx:180,vy:rand(900,1200),life:1.2});}
+  if(evK.rainbow>.05){if(r(55*evK.rainbow))evP.push({k:'drop',x:rand(0,W),y:-10,vx:30,vy:rand(500,700),h:Math.random()*360,life:1.5});}
+  if(evK.snow>.05){if(r(70*evK.snow))evP.push({k:'snow',x:rand(-40,W+40),y:-10,vx:rand(-15,25),vy:rand(35,80),r:rand(1.5,4),ph:rand(0,6),life:14});}
+  if(evK.gold>.05){if(r(7*evK.gold))evP.push({k:'coin',x:rand(30,W-30),y:-20,vx:rand(-20,20),vy:rand(120,220),gy:rand(FIELD_TOP+20,FENCE_Y+10),ph:rand(0,6),life:6,land:0});}
+  if(evK.meteor>.05){if(r(1.6*evK.meteor)){const big=Math.random()<.2;evP.push({k:'met',x:rand(-100,W*.8),y:rand(-20,60),vx:rand(380,560)*(big?.8:1),vy:rand(150,260),life:big?2.2:1.4,max:big?2.2:1.4,big,h:rand(180,300)});}}
+  if(evK.blood>.3){evT.bat-=dt;if(evT.bat<=0){evT.bat=rand(4,9);const dir=Math.random()<.5?1:-1,y=rand(20,95);for(let i=0;i<rand(3,6);i++)evP.push({k:'bat',x:dir>0?-30-i*28:W+30+i*28,y:y+rand(-12,12),vx:dir*rand(110,150),vy:0,ph:rand(0,6),life:12});}}
+  if(evOn('disco')){evT.disco-=dt;if(evT.disco<=0){evT.disco=20;const q=Math.random();spawnBlock(q<.5?'gold':q<.8?'diamond':q<.95?'rainbow':'cosmic');toast('🪩 Диско-блок с неба!','#d17bff');}}
+  if(evOn('storm')){evT.storm-=dt;if(evT.storm<=0){evT.storm=rand(4,8);stormStrike();}}
+  for(const p of evP){p.life-=dt;
+    if(p.k==='coin'&&!p.land){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=200*dt;if(p.y>=p.gy){p.y=p.gy;p.land=1;p.life=Math.min(p.life,1.2);if(Math.random()<.4)particles.push({t:'star',x:p.x,y:p.y-6,vx:0,vy:-30,life:.6,col:'#ffe68a',sz:3,g:0});}}
+    else if(p.k==='snow'){p.x+=(p.vx+Math.sin(time*1.6+p.ph)*22)*dt;p.y+=p.vy*dt;if(p.y>H+10)p.life=0;}
+    else if(p.k==='bat'){p.x+=p.vx*dt;p.y+=Math.sin(time*5+p.ph)*30*dt;if(p.x<-80||p.x>W+80)p.life=0;}
+    else if(p.k!=='coin'){p.x+=p.vx*dt;p.y+=p.vy*dt;if(p.y>H+20)p.life=0;}}
+  evP=evP.filter(p=>p.life>0);if(evP.length>900)evP.splice(0,evP.length-900);
+}
+function stormStrike(){
+  const pool=animals.filter(a=>!a.test);
+  if(!pool.length||Math.random()<.25){const x=rand(60,W-60),y=rand(FIELD_TOP,FIELD_BOT);gameBolts.push(genBolt(x+rand(-80,80),-10,x,y,'#cfe8ff'));gameFlash=.45;thunder(.9);burst(x,y,'#cfe8ff',20);return;}
+  const a=pool[Math.random()*pool.length|0],s=depth(a.y),by=a.y-a.def.size*s*.4;
+  for(let i=0;i<2;i++)gameBolts.push(genBolt(a.x+rand(-90,90),-10,a.x+rand(-5,5),by,'#cfe8ff'));
+  gameFlash=.6;thunder(1.2);cam.shake=.6;burst(a.x,by,'#fff',40);burst(a.x,by,'#9fd8ff',30);
+  const order=[null,'gold','diamond','rainbow'];let m;
+  if(!a.mut){const q=Math.random();m=q<.6?'gold':q<.9?'diamond':'rainbow';}else m=order[Math.min(3,order.indexOf(a.mut)+1)];
+  if(m===a.mut){floatText(a.x,by-40,'⚡ Уже радужный!','#cfe8ff');return;}
+  a.mut=m;a.odds=oddsOf(a.def,m);a.hl=4;
+  floatText(a.x,by-44,`⚡ ${MUT[m].icon} ${MUT[m].n}!`,MUT[m].c,true);
+  if(a.odds>=1e3)announce(a);
+}
+function drawEvSky(c){
+  const kb=evK.blood||0,kr=evK.rainbow||0,kd=evK.disco||0;
+  if(kb>0){const mx=W*.78,my=62,R=34;
+    const g=c.createRadialGradient(mx,my,R*.6,mx,my,R*3.2);g.addColorStop(0,`rgba(255,40,30,${.45*kb})`);g.addColorStop(1,'rgba(255,0,0,0)');c.fillStyle=g;c.beginPath();c.arc(mx,my,R*3.2,0,7);c.fill();
+    const g2=c.createRadialGradient(mx-10,my-10,4,mx,my,R);g2.addColorStop(0,`rgba(255,140,110,${kb})`);g2.addColorStop(.6,`rgba(220,30,25,${kb})`);g2.addColorStop(1,`rgba(120,0,0,${kb})`);
+    c.fillStyle=g2;c.beginPath();c.arc(mx,my,R,0,7);c.fill();
+    c.fillStyle=`rgba(90,0,0,${.35*kb})`;for(const [dx,dy,rr] of [[-10,-6,7],[9,8,5],[6,-12,4],[-4,12,4]]){c.beginPath();c.arc(mx+dx,my+dy,rr,0,7);c.fill();}}
+  if(kr>0){const cx=W/2,cy=HORIZON+340,cols=['#ff3b3b','#ff9b2e','#ffe14d','#4ade80','#38bdf8','#6366f1','#c084fc'];
+    c.lineWidth=11;for(let i=0;i<7;i++){c.strokeStyle=cols[i];c.globalAlpha=.42*kr;c.beginPath();c.arc(cx,cy,400-i*11,Math.PI*1.05,Math.PI*1.95);c.stroke();}c.globalAlpha=1;}
+  if(kd>0){const bx=W/2,by=36;c.strokeStyle=`rgba(200,200,220,${kd})`;c.lineWidth=2;c.beginPath();c.moveTo(bx,0);c.lineTo(bx,by-18);c.stroke();
+    const g=c.createRadialGradient(bx-6,by-6,2,bx,by,18);g.addColorStop(0,`rgba(255,255,255,${kd})`);g.addColorStop(1,`rgba(120,120,150,${kd})`);c.fillStyle=g;c.beginPath();c.arc(bx,by,18,0,7);c.fill();
+    for(let i=0;i<14;i++){const an=i/14*Math.PI*2+time*2,px=bx+Math.cos(an)*12,py=by+Math.sin(an*1.3)*12;c.fillStyle=`hsla(${(i*40+time*200)%360},100%,80%,${kd*(.5+.5*Math.sin(time*9+i))})`;c.fillRect(px-2,py-2,4,4);}}
+}
+function drawEvFront(c){
+  const kb=evK.blood||0,kg=evK.gold||0,kd=evK.disco||0,ks=evK.snow||0;
+  if(kd>0){const bx=W/2,by=36;c.save();c.globalCompositeOperation='lighter';
+    for(let i=0;i<6;i++){const an=Math.PI/2+Math.sin(time*.9+i*1.7)*.85,len=H*1.1,w=.13;
+      c.fillStyle=`hsla(${(time*70+i*60)%360},100%,60%,${.16*kd})`;c.beginPath();c.moveTo(bx,by);c.lineTo(bx+Math.cos(an-w)*len,by+Math.sin(an-w)*len);c.lineTo(bx+Math.cos(an+w)*len,by+Math.sin(an+w)*len);c.closePath();c.fill();}
+    const beat=Math.pow(1-((time*124/60)%1),3);c.fillStyle=`hsla(${(time*90)%360},100%,60%,${.08*beat*kd})`;c.fillRect(0,0,W,H);c.restore();}
+  for(const p of evP){
+    if(p.k==='rain'){c.strokeStyle='rgba(185,205,235,.5)';c.lineWidth=1.2;c.beginPath();c.moveTo(p.x,p.y);c.lineTo(p.x-p.vx*.022,p.y-p.vy*.022);c.stroke();}
+    else if(p.k==='drop'){c.strokeStyle=`hsla(${p.h},100%,70%,.85)`;c.lineWidth=2.2;c.beginPath();c.moveTo(p.x,p.y);c.lineTo(p.x-p.vx*.03,p.y-p.vy*.03);c.stroke();}
+    else if(p.k==='snow'){c.fillStyle='rgba(255,255,255,.92)';c.beginPath();c.arc(p.x,p.y,p.r,0,7);c.fill();}
+    else if(p.k==='coin'){const w=Math.abs(Math.cos(time*6+p.ph))*9+1.5;c.globalAlpha=Math.min(1,p.life);c.fillStyle='#ffd23f';c.strokeStyle='#a86a00';c.lineWidth=1.5;ell(c,p.x,p.y,w,10);c.fill();c.stroke();
+      c.fillStyle='rgba(255,255,255,.6)';ell(c,p.x-w*.3,p.y-3,w*.25,3);c.fill();c.globalAlpha=1;}
+    else if(p.k==='met'){const k=p.life/p.max,len=p.big?190:120,sp=Math.hypot(p.vx,p.vy),tx=p.x-p.vx/sp*len,ty=p.y-p.vy/sp*len;
+      const g=c.createLinearGradient(p.x,p.y,tx,ty);g.addColorStop(0,`hsla(${p.h},100%,90%,${k})`);g.addColorStop(1,`hsla(${p.h},100%,70%,0)`);
+      c.strokeStyle=g;c.lineWidth=p.big?5:2.5;c.lineCap='round';c.beginPath();c.moveTo(p.x,p.y);c.lineTo(tx,ty);c.stroke();
+      c.fillStyle=`rgba(255,255,255,${k})`;c.beginPath();c.arc(p.x,p.y,p.big?4.5:2.5,0,7);c.fill();}
+    else if(p.k==='bat'){c.save();c.translate(p.x,p.y);c.scale(p.vx>0?-1:1,.7+.3*Math.abs(Math.sin(time*14+p.ph)));c.font=`22px ${EMOJI_FONT}`;c.textAlign='center';c.textBaseline='middle';c.fillStyle='#000';c.fillText('🦇',0,0);c.restore();}
+  }
+  if(kb>0){const g=c.createLinearGradient(0,FENCE_Y-120,0,H);g.addColorStop(0,'rgba(120,0,0,0)');g.addColorStop(1,`rgba(140,0,10,${.35*kb})`);c.fillStyle=g;c.fillRect(0,FENCE_Y-120,W,H);}
+  if(kg>0){c.fillStyle=`rgba(255,190,40,${.08*kg})`;c.fillRect(0,0,W,H);}
+  if(ks>0){const g=c.createRadialGradient(W/2,H/2,H*.35,W/2,H/2,H*.9);g.addColorStop(0,'rgba(220,240,255,0)');g.addColorStop(1,`rgba(225,242,255,${.55*ks})`);c.fillStyle=g;c.fillRect(0,0,W,H);}
+}
+
+// ======================= МЕГА-ИВЕНТЫ: МУЗЫКА =======================
+// Играет всегда только ОДНА тема — от последнего запущенного активного ивента.
+const mtof=m=>440*Math.pow(2,(m-69)/12);
+let _noise=null;
+function noiseBuf(){if(!_noise){const n=AC.sampleRate;_noise=AC.createBuffer(1,n,n);const d=_noise.getChannelData(0);for(let i=0;i<n;i++)d[i]=Math.random()*2-1;}return _noise;}
+function mOsc(type,f,t,dur,vol,o={}){
+  const A=AC,os=A.createOscillator(),g=A.createGain();os.type=type;os.frequency.setValueAtTime(f,t);
+  if(o.det)os.detune.value=o.det;if(o.glide)os.frequency.exponentialRampToValueAtTime(o.glide,t+dur*.9);
+  let node=os;if(o.lp){const fl=A.createBiquadFilter();fl.type='lowpass';fl.frequency.value=o.lp;os.connect(fl);node=fl;}
+  const at=o.a||.008;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+at);
+  if(o.hold)g.gain.setValueAtTime(vol,t+Math.max(at,dur-o.hold));
+  g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  node.connect(g).connect(Music.bus);os.start(t);os.stop(t+dur+.05);
+}
+function mNoise(t,dur,vol,freq=7000,type='highpass'){const A=AC,s=A.createBufferSource();s.buffer=noiseBuf();const f=A.createBiquadFilter();f.type=type;f.frequency.value=freq;const g=A.createGain();
+  g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(.0001,t+dur);s.connect(f).connect(g).connect(Music.bus);s.start(t,Math.random()*.5);s.stop(t+dur+.02);}
+const mKick=(t,v=.8)=>mOsc('sine',150,t,.32,v,{a:.002,glide:42});
+const mSnare=(t,v=.3)=>{mNoise(t,.16,v,1800,'bandpass');mOsc('triangle',200,t,.1,v*.45,{a:.002,glide:130});};
+const mHat=(t,v=.08,open)=>mNoise(t,open?.22:.045,v,8500);
+const mTom=(t,f=110,v=.45)=>mOsc('sine',f,t,.38,v,{a:.003,glide:f*.55});
+const chordAt=(prog,step)=>prog[Math.floor(step/16)%prog.length];
+const THEMES={
+  blood:{bpm:76,seq(s,t,sp){const P=[[57,60,64],[53,57,60],[50,53,57],[52,56,59]],C=chordAt(P,s),i=s%16;
+    if(i===0)C.forEach(n=>{mOsc('sawtooth',mtof(n),t,sp*16,.035,{a:.4,lp:900,det:-7,hold:sp*3});mOsc('sawtooth',mtof(n),t,sp*16,.03,{a:.4,lp:900,det:7,hold:sp*3});});
+    if([0,6,8,14].includes(i))mOsc('sawtooth',mtof(C[0]-24),t,sp*2.2,.16,{lp:320});
+    if(i%2===0)mOsc('square',mtof(C[(i/2)%3]+(Math.floor(s/16)%2?24:12)),t,sp*1.8,.032,{lp:1600});
+    if(i===0||i===10)mKick(t,.75);if(i===8)mTom(t,90,.5);if(i===12)mTom(t,70,.45);
+    if(i===15&&Math.floor(s/16)%4===3)mOsc('sine',mtof(75),t,sp*6,.05,{a:.05});}},
+  rainbow:{bpm:118,seq(s,t,sp){const P=[[60,64,67],[55,59,62],[57,60,64],[53,57,60]],C=chordAt(P,s),i=s%16,N=[C[0],C[1],C[2],C[0]+12];
+    mOsc('triangle',mtof(N[[0,1,2,3,2,1,0,1][i%8]]+0)*2,t,sp*1.6,.05);
+    if(i===0||i===8)mOsc('sine',mtof(C[0]-12),t,sp*7,.22,{a:.01});
+    if(i%4===0)mKick(t,.6);if(i===4||i===12)mSnare(t,.18);if(i%4===2)mHat(t,.06);
+    if(i===14&&Math.random()<.6)mOsc('sine',mtof(C[2]+24),t,.6,.04);}},
+  meteor:{bpm:84,seq(s,t,sp){const P=[[62,66,69,73],[64,68,71,74],[59,62,66,69],[61,64,68,71]],C=chordAt(P,s),i=s%16,SC=[74,76,78,81,83,85,86,88];
+    if(i===0)C.forEach(n=>{mOsc('sine',mtof(n),t,sp*17,.04,{a:.8,hold:sp*4});mOsc('triangle',mtof(n+12),t,sp*17,.012,{a:1.2,hold:sp*4});});
+    if(i===0)mOsc('sine',mtof(C[0]-24),t,sp*16,.14,{a:.3,hold:sp*6});
+    if(Math.random()<.32){const n=SC[Math.random()*SC.length|0];mOsc('sine',mtof(n),t,.7,.035);mOsc('sine',mtof(n),t+sp*3,.6,.014);}
+    if(i===0)mKick(t,.45);if(i%8===4)mHat(t,.03,true);}},
+  gold:{bpm:150,seq(s,t,sp){const P=[[55,59,62],[60,64,67],[62,66,69],[55,59,62]],C=chordAt(P,s),i=s%16;
+    if(i%8===0)mOsc('triangle',mtof(C[0]-12),t,sp*2,.28);if(i%8===4)mOsc('triangle',mtof(C[0]-17),t,sp*2,.24);
+    if(i%4===2)C.forEach(n=>mOsc('square',mtof(n),t,sp*.8,.026,{lp:2600}));
+    mOsc('sawtooth',mtof(C[[0,1,2,0,1,2,0,2][i%8]]+12),t,sp*.9,.035,{lp:3200,a:.002});
+    if(i%2===1)mHat(t,.05);if(i===0||i===8)mKick(t,.55);}},
+  disco:{bpm:124,seq(s,t,sp){const P=[[57,60,64,67],[50,53,57,60],[55,59,62,65],[48,52,55,59]],C=chordAt(P,s),i=s%16;
+    if(i%4===0)mKick(t,.9);if(i===4||i===12)mSnare(t,.28);if(i%4===2)mHat(t,.08,true);else if(i%2===1)mHat(t,.04);
+    if(i%2===0)mOsc('sawtooth',mtof(C[0]-(i%4===0?24:12)),t,sp*1.5,.15,{lp:750,a:.004});
+    if([3,6,11,14].includes(i))C.forEach(n=>mOsc('square',mtof(n+12),t,sp*1.1,.018,{lp:2200}));
+    if(i===0)C.forEach(n=>mOsc('sawtooth',mtof(n),t,sp*16,.014,{a:.3,lp:1500,hold:sp*4}));}},
+  snow:{bpm:66,seq(s,t,sp){const M=[76,79,81,83,81,79,76,74,76,79,83,86,83,81,79,81,76,74,71,74,76,79,76,74,71,69,71,74,76,74,71,0],i=s%16;
+    if(s%2===0){const n=M[(s/2)%M.length];if(n){mOsc('sine',mtof(n),t,1.3,.06,{a:.003});mOsc('sine',mtof(n)*3,t,.5,.012,{a:.003});}}
+    const P=[[52,59,64],[57,64,69],[54,61,66],[59,66,71]],C=chordAt(P,s);
+    if(i===0){mOsc('sine',mtof(C[0]-12),t,sp*15,.1,{a:.2,hold:sp*4});C.forEach(n=>mOsc('triangle',mtof(n),t,sp*16,.018,{a:.6,hold:sp*4}));}
+    if(i%4===2)mNoise(t,.08,.018,6000);}},
+  storm:{bpm:104,seq(s,t,sp){const i=s%16,b=Math.floor(s/16);const O=[50,50,53,50,55,50,53,52];
+    mOsc('sawtooth',mtof(O[i%8]-12+(b%4===3?-2:0)),t,sp*.9,.085,{lp:950,a:.004});
+    if([0,3,6,10,12,14].includes(i))mTom(t,[90,110,90,80,110,70][[0,3,6,10,12,14].indexOf(i)],.42);
+    if(i===0||i===8)mKick(t,.85);if(i===0&&b%2===0)mNoise(t,1.1,.08,4000);
+    if(s%32===0)[50,53,57].forEach(n=>mOsc('sawtooth',mtof(n),t,sp*6,.05,{lp:1300,a:.03}));
+    if(i===8&&b%2===1)mOsc('sine',mtof(74),t,sp*7,.04,{a:.2});}},
+};
+const Music={cur:null,bus:null,timer:null,step:0,next:0,want:null,
+  latest(){let best=null,bs=-1;for(const k in BIG_EV)if(evOn(k)&&EVENTS[k].start>=bs){bs=EVENTS[k].start;best=k;}return best;},
+  sync(){const id=this.latest();this.want=id;
+    if(!id||muted||SET.music===false){this.stop();return;}
+    if(this.cur===id)return;
+    if(!AC||AC.state!=='running'){this.stop();return;} // заиграет после первого клика
+    this.play(id);},
+  play(id){this.stop();const A=AC,g=A.createGain(),comp=A.createDynamicsCompressor();
+    g.gain.setValueAtTime(0,A.currentTime);g.gain.linearRampToValueAtTime(.5,A.currentTime+1.5);
+    g.connect(comp).connect(A.destination);this.bus=g;this.cur=id;this.step=0;this.next=A.currentTime+.06;
+    this.timer=setInterval(()=>this.tick(),30);this.tick();},
+  stop(){if(this.timer){clearInterval(this.timer);this.timer=null;}
+    if(this.bus&&AC){const g=this.bus,A=AC;try{g.gain.cancelScheduledValues(A.currentTime);g.gain.setValueAtTime(g.gain.value,A.currentTime);g.gain.linearRampToValueAtTime(0,A.currentTime+.5);}catch(e){}
+      setTimeout(()=>{try{g.disconnect();}catch(e){}},800);}
+    this.bus=null;this.cur=null;},
+  tick(){const th=THEMES[this.cur];if(!th||!this.bus)return;const sp=60/th.bpm/4;
+    if(this.next<AC.currentTime-.5)this.next=AC.currentTime+.05; // вкладка спала — не догоняем
+    while(this.next<AC.currentTime+.15){try{th.seq(this.step,this.next,sp);}catch(e){console.warn(e);}this.step++;this.next+=sp;}},
+};
+
 // ======================= НАСТРОЙКИ ПОКАЗА ПОЯВЛЕНИЙ =======================
 let SET={mode:'big',from:50};try{Object.assign(SET,JSON.parse(localStorage.getItem('lr_set'))||{});}catch(e){}
 const SET_MODES=[['big','🎬','Большая анимация','на весь экран, как раньше'],['top','📌','Сверху','аккуратная плашка в углу'],['off','🔕','Выключено','только метка над зверем']];
@@ -1787,6 +1971,9 @@ function renderSettings(){
     ${SET_MODES.map(([id,ic,n,d])=>`<button class="opt ${SET.mode===id?'on':''}" onclick="setOpt('mode','${id}')"><span class="oi">${ic}</span>${n}<small>${d}</small></button>`).join('')}</div></div>
   <div class="sGroup"><div class="sl">🎯 Показывать, если шанс реже чем</div><div class="opts">
     ${SET_FROM.map(([v,n])=>`<button class="opt ${SET.from===v?'on':''}" onclick="setOpt('from',${v})">${n}</button>`).join('')}</div></div>
+  <div class="sGroup"><div class="sl">🎵 Музыка мега-ивентов</div><div class="opts">
+    <button class="opt ${SET.music!==false?'on':''}" onclick="setOpt('music',true);Music.sync()"><span class="oi">🎵</span>Включена</button>
+    <button class="opt ${SET.music===false?'on':''}" onclick="setOpt('music',false);Music.sync()"><span class="oi">🔕</span>Выключена</button></div></div>
   <div class="sGroup"><div class="sl">🔊 Звук</div><div class="opts">
     <button class="opt ${!muted?'on':''}" onclick="if(muted)toggleMute();renderSettings()"><span class="oi">🔊</span>Включён</button>
     <button class="opt ${muted?'on':''}" onclick="if(!muted)toggleMute();renderSettings()"><span class="oi">🔇</span>Выключен</button></div></div>
@@ -2185,9 +2372,12 @@ async function onAdminMsg(m){
 function runAdmin(c,fresh){
   if(c.cmd==='event'&&EVENTS[c.type]){
     const was=evOn(c.type);
-    EVENTS[c.type]={mult:clamp(okNum(c.mult),1,10),until:okNum(c.until)};
-    const nm=c.type==='luck'?'🍀 Ивент удачи':'🧬 Ивент мутаций';
-    if(evOn(c.type)){if(fresh){toast(`👑 ${nm} ×${EVENTS[c.type].mult} на ${Math.round((c.until-Date.now())/60000)} мин!`,'#ffcf3f');addFeed(`👑 Админ запустил: ${nm} ×${EVENTS[c.type].mult}`,'adm');fanfare(5,true);}}
+    EVENTS[c.type]={mult:clamp(okNum(c.mult),1,10),until:okNum(c.until),start:okNum(c.ts)};
+    const B=BIG_EV[c.type];
+    const nm=B?`${B.ic} ${B.n}`:c.type==='luck'?'🍀 Ивент удачи':'🧬 Ивент мутаций';
+    if(evOn(c.type)){if(fresh){
+      if(B){toast(`👑 МЕГА-ИВЕНТ: <b>${nm}</b> на ${Math.round((c.until-Date.now())/60000)} мин!<br><small>${B.d}</small>`,B.c,true);addFeed(`👑 Админ запустил мега-ивент: ${nm}`,'adm');evIntro(c.type);}
+      else{toast(`👑 ${nm} ×${EVENTS[c.type].mult} на ${Math.round((c.until-Date.now())/60000)} мин!`,'#ffcf3f');addFeed(`👑 Админ запустил: ${nm} ×${EVENTS[c.type].mult}`,'adm');fanfare(5,true);}}}
     else if(was){toast(`${nm} завершён`);}
     evWatch(true);
   }else if(c.cmd==='spawn'&&DEF[c.id]){
@@ -2204,7 +2394,7 @@ function runAdmin(c,fresh){
   }
 }
 let evKey='';
-function evWatch(force){const k=(evOn('luck')?'L'+EVENTS.luck.mult:'')+(evOn('mut')?'M'+EVENTS.mut.mult:'');if(k!==evKey||force){evKey=k;renderLassoInfo();renderBook();}}
+function evWatch(force){const k=(evOn('luck')?'L'+EVENTS.luck.mult:'')+(evOn('mut')?'M'+EVENTS.mut.mult:'')+Object.keys(BIG_EV).filter(evOn).join(',');if(k!==evKey||force){evKey=k;renderLassoInfo();renderBook();Music.sync();}else if(Music.want&&!Music.cur&&AC&&AC.state==='running')Music.sync();}
 function spawnSpecific(id,mut){
   const def=DEF[id];if(!def)return;const dir=Math.random()<.5?1:-1;
   if(def.boss&&animals.some(x=>x.def.boss&&!x.test)){toast('😈 Проповедник тьмы уже на поле!','#c77dff');return;}
@@ -2227,6 +2417,11 @@ function renderAdmin(){setTimeout(()=>{const s=$('admBlock');if(s){s.onchange=bl
       <select id="admBlockN" class="inp"><option>1</option><option>3</option><option>5</option><option>10</option></select></div>
     <div class="hint" id="admBlockInfo" style="margin-top:6px"></div>
     <div class="row"><button class="btn" onclick="admBlock(false)">Себе</button><button class="btn green" onclick="admBlock(true)">🌍 Всем</button></div></div>
+  <div class="card adminBox gold"><h4>🎆 Мега-ивенты (визуал + музыка)</h4>
+    <div class="hint" style="margin:3px 0 8px">Можно запускать несколько сразу — эффекты складываются, а музыка играет только от последнего запущенного.</div>
+    <div class="opts">${Object.entries(BIG_EV).map(([k,v])=>`<button class="opt" style="border-color:${v.c}55" onclick="admBig('${k}')" title="${v.d}"><span class="oi">${v.ic}</span>${v.n}<small>${v.d}</small></button>`).join('')}</div>
+    <div class="row"><select id="bigMin" class="inp"><option value="3">3 мин</option><option value="5" selected>5 мин</option><option value="10">10 мин</option><option value="30">30 мин</option></select>
+      <button class="btn red" onclick="admBigStop()">⏹ Остановить все</button></div></div>
   <div class="card adminBox"><h4>🎉 Ивент для всех игроков</h4>
     <div class="row"><select id="evType" class="inp"><option value="luck">🍀 Удача</option><option value="mut">🧬 Мутации</option></select>
       <select id="evMult" class="inp"><option>2</option><option>3</option><option>5</option><option>10</option></select>
@@ -2249,6 +2444,8 @@ function blockInfo(){const el=$('admBlockInfo');if(!el)return;const B=LB[$('admB
   const rs=[];for(let r=B.minR;r<=B.maxR;r++)rs.push(`<span style="color:${RAR[r].c}">${RAR[r].n}</span>`);
   const pc=Object.entries(B.p).map(([k,v])=>({animal:'🐾 зверь',money:'💰 деньги',multi:'🐾×3 стая',boom:'💨 пусто'}[k]+' '+Math.round(v*100)+'%')).join(' · ');
   el.innerHTML=`Звери: ${rs.join(', ')}<br>${pc}`;}
+function admBig(type){const min=+$('bigMin').value;adminSend({cmd:'event',type,mult:1,until:Date.now()+min*60000},`${T}/ev/${type}`,true);}
+function admBigStop(){for(const type in BIG_EV)if(evOn(type))adminSend({cmd:'event',type,mult:1,until:Date.now()-1},`${T}/ev/${type}`,true);}
 function admEvent(){const type=$('evType').value,mult=+$('evMult').value,min=+$('evMin').value;adminSend({cmd:'event',type,mult,until:Date.now()+min*60000},`${T}/ev/${type}`,true);}
 function admStop(){for(const type of ['luck','mut'])adminSend({cmd:'event',type,mult:1,until:Date.now()-1},`${T}/ev/${type}`,true);}
 function admMoney(all){const v=clamp(+$('admMoney').value||0,0,1e15);if(all)adminSend({cmd:'money',amount:v});else{S.money+=v;coinSound();toast(`💰 +${fmt(v)} $`);}}
